@@ -1,0 +1,100 @@
+#version 450 compatibility
+#extension GL_ARB_compute_shader : enable
+#extension GL_ARB_shader_storage_buffer_object : enable
+
+#define WORK_GROUP_SIZE_X 20
+#define WORK_GROUP_SIZE_Y 20
+#define FINAL_IMAGE_RES_Y 1920
+#define FINAL_IMAGE_RES_X 1920
+
+layout(std430, binding = 0) buffer Triangle { unsigned int triangles[]; };
+layout(std430, binding = 1) buffer UV { vec2 uv[]; };
+layout(std430, binding = 2) buffer Z { float z[]; };
+layout(std430, binding = 3) buffer ZBuffer { float zBuffer[]; };
+layout(local_size_x = WORK_GROUP_SIZE_X, local_size_y = WORK_GROUP_SIZE_Y, local_size_z = 1) in;
+
+shared float sharedZbuffer[FINAL_IMAGE_RES_Y * FINAL_IMAGE_RES_X];
+
+void main()
+{
+	uvec3 size = gl_NumWorkGroups * gl_WorkGroupSize;
+	uvec2 gid = gl_GlobalInvocationID.xy;
+	if (gid.x != size.x - 1 && gid.y != size.y - 1)
+	{
+		uint triIndex = (gid.y * size.x + gid.x) * 6;
+		unsigned int tri1Idx1 = triangles[triIndex];
+		unsigned int tri1Idx2 = triangles[triIndex + 1];
+		unsigned int tri1Idx3 = triangles[triIndex + 2];
+
+		unsigned int tri2Idx1 = triangles[triIndex + 3];
+		unsigned int tri2Idx2 = triangles[triIndex + 4];
+		unsigned int tri2Idx3 = triangles[triIndex + 5];
+
+		vec2 tri1minUV = vec2(min(min(uv[tri1Idx1].x, uv[tri1Idx2].x), uv[tri1Idx3].x), 
+			min(min(uv[tri1Idx1].y, uv[tri1Idx2].y), uv[tri1Idx3].y));
+		vec2 tri1maxUV = vec2(max(max(uv[tri1Idx1].x, uv[tri1Idx2].x), uv[tri1Idx3].x), 
+			max(max(uv[tri1Idx1].y, uv[tri1Idx2].y), uv[tri1Idx3].y));
+		
+		vec2 tri2minUV = vec2(min(min(uv[tri2Idx1].x, uv[tri2Idx2].x), uv[tri2Idx3].x),
+			min(min(uv[tri2Idx1].y, uv[tri2Idx2].y), uv[tri2Idx3].y));
+		vec2 tri2maxUV = vec2(max(max(uv[tri2Idx1].x, uv[tri2Idx2].x), uv[tri2Idx3].x),
+			max(max(uv[tri2Idx1].y, uv[tri2Idx2].y), uv[tri2Idx3].y));
+
+		uvec2 tri1uv1 = uvec2(uv[tri1Idx1].x, uv[tri1Idx1].y);
+		uvec2 tri1uv2 = uvec2(uv[tri1Idx2].x, uv[tri1Idx2].y);
+		uvec2 tri1uv3 = uvec2(uv[tri1Idx3].x, uv[tri1Idx3].y);
+
+		uvec2 tri2uv1 = uvec2(uv[tri2Idx1].x, uv[tri2Idx1].y);
+		uvec2 tri2uv2 = uvec2(uv[tri2Idx2].x, uv[tri2Idx2].y);
+		uvec2 tri2uv3 = uvec2(uv[tri2Idx3].x, uv[tri2Idx3].y);
+		
+		for (int i = int(tri1minUV.y); i < int(tri1maxUV.y); i++)
+		{
+			for (int j = int(tri1minUV.x); j < int(tri1maxUV.x); j++)
+			{
+				float weight1 = ((tri1uv2.y - tri1uv3.y) * (j - tri1uv3.x) + (tri1uv3.x - tri1uv2.x) * (i - tri1uv3.y))
+				/ ((tri1uv2.y - tri1uv3.y) * (tri1uv1.x - tri1uv3.x) + (tri1uv3.x - tri1uv2.x) * (tri1uv1.y - tri1uv3.y));
+				float weight2 = ((tri1uv3.y - tri1uv1.y) * (j - tri1uv3.x) + (tri1uv1.x - tri1uv3.x) * (i - tri1uv3.y)) 
+				/ ((tri1uv2.y - tri1uv3.y) * (tri1uv1.x - tri1uv3.x) + (tri1uv3.x - tri1uv2.x) * (tri1uv1.y - tri1uv3.y));
+				float weight3 = 1 - weight1 - weight2;
+				if (weight1 < 0 || weight2 < 0 || weight3 < 0)
+				{
+					continue;
+				}
+				else 
+				{
+					uint index = i * FINAL_IMAGE_RES_X + j;
+					float newZ = z[tri1Idx1] * weight1 + z[tri1Idx2] * weight2 + z[tri1Idx3] * weight3;
+					if (zBuffer[index] > newZ)
+						zBuffer[index] = newZ;
+					barrier();
+				}
+			}
+		}
+		
+		for (int i = int(tri2minUV.y); i < int(tri2maxUV.y); i++)
+		{
+			for (int j = int(tri2minUV.x); j < int(tri2maxUV.x); j++)
+			{
+				float weight1 = ((tri2uv2.y - tri2uv3.y) * (j - tri2uv3.x) + (tri2uv3.x - tri2uv2.x) * (i - tri2uv3.y))
+					/ ((tri2uv2.y - tri2uv3.y) * (tri2uv1.x - tri2uv3.x) + (tri2uv3.x - tri2uv2.x) * (tri2uv1.y - tri2uv3.y));
+				float weight2 = ((tri2uv3.y - tri2uv1.y) * (j - tri2uv3.x) + (tri2uv1.x - tri2uv3.x) * (i - tri2uv3.y))
+					/ ((tri2uv2.y - tri2uv3.y) * (tri2uv1.x - tri2uv3.x) + (tri2uv3.x - tri2uv2.x) * (tri2uv1.y - tri2uv3.y));
+				float weight3 = 1 - weight1 - weight2;
+				if (weight1 < 0 || weight2 < 0 || weight3 < 0)
+				{
+					continue;
+				}
+				else
+				{
+					uint index = i * FINAL_IMAGE_RES_X + j;
+					float newZ = z[tri2Idx1] * weight1 + z[tri2Idx2] * weight2 + z[tri2Idx3] * weight3;
+					if (zBuffer[index] > newZ)
+						zBuffer[index] = newZ;
+					barrier();
+				}
+			}
+		}
+
+	}
+}

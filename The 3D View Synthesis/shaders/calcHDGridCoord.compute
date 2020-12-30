@@ -1,0 +1,31 @@
+#version 450 compatibility
+#extension GL_ARB_compute_shader : enable
+#extension GL_ARB_shader_storage_buffer_object : enable
+
+#define WORK_GROUP_SIZE_X 20
+#define WORK_GROUP_SIZE_Y 20
+
+uniform float depthCamFocal;
+uniform float colorCamFocal;
+uniform vec2 principalpoint;
+uniform mat4 transformCam;
+
+layout(std430, binding = 0) buffer Depth { float depths[]; };
+layout(std430, binding = 1) buffer UV { vec2 uvs[]; };
+layout(std430, binding = 2) buffer Z { float zs[]; };
+layout(local_size_x = WORK_GROUP_SIZE_X, local_size_y = WORK_GROUP_SIZE_Y, local_size_z = 1) in;
+
+void main()
+{
+	uvec3 size = gl_NumWorkGroups * gl_WorkGroupSize;
+	uvec2 gid = gl_GlobalInvocationID.xy;
+	uint index = gid.y * size.x + gid.x;
+	float z = depthCamFocal * depths[index] / sqrt(pow(depthCamFocal, 2) + pow(gid.x, 2) + pow(gid.y, 2));
+	float x = gid.x * z / depthCamFocal;
+	float y = gid.y * z / depthCamFocal;
+	vec4 coord = vec4(x, y, z, 1);
+	coord = transformCam * coord;
+	zs[index] = coord.z;
+	uvs[index] = vec2(colorCamFocal * coord.x / coord.z + principalpoint.x,
+		colorCamFocal * coord.y / coord.z + principalpoint.y);
+}
