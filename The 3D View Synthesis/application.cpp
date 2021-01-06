@@ -10,6 +10,8 @@
 #define PROJECT_WORK_GROUP_SIZE_Y 20
 #define RESAMPLE_WORK_GROUP_SIZE_X 20
 #define RESAMPLE_WORK_GROUP_SIZE_Y 20
+#define WORLD3D_WORK_GROUP_SIZE_X 30
+#define WORLD3D_WORK_GROUP_SIZE_Y 30
 
 void frameBufferSizeCallBack(GLFWwindow* window, int height, int width) 
 {
@@ -92,6 +94,11 @@ namespace SceneSynthesis {
         performShader({ "shaders/calcDepthmapResampling.compute", GL_COMPUTE_SHADER, true });
         setupDepthmapResampling(m_computeShaderPrograms[m_computeShaderPrograms.size() - 1]);
         getDepthmapResampling(m_workGroupsNum[m_workGroupsNum.size() - 1]);
+
+        performShader({ "shader/calc3DWorldCoord.compute", GL_COMPUTE_SHADER, true });
+        setup3DWorldCoord(m_computeShaderPrograms[m_computeShaderPrograms.size() - 1]);
+        get3DWorldCoord(m_workGroupsNum[m_workGroupsNum.size() - 1]);
+
         return 0;
     }
 
@@ -168,7 +175,7 @@ namespace SceneSynthesis {
         GLsizeiptr triBufferSize = (m_depthmap->width - 1.0) * (m_depthmap->height - 1.0) * 6.0 * sizeof(unsigned int);
         GLsizeiptr uvBufferSize = m_depthmap->width * m_depthmap->height * sizeof(glm::vec2);
         GLsizeiptr zBufferSize = m_depthmap->width * m_depthmap->height * sizeof(float);
-        GLsizeiptr resampledZBufferSize = 1920 * 1920 * sizeof(float);
+        GLsizeiptr resampledZBufferSize = m_colorImage->width * m_colorImage->height * sizeof(float);
 
         m_resampledZs = std::vector<float>(resampledZBufferSize, 100);
 
@@ -187,12 +194,37 @@ namespace SceneSynthesis {
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_zBuffer);
         glBufferData(GL_SHADER_STORAGE_BUFFER, zBufferSize, &m_projectedZs[0], GL_STATIC_DRAW);
 
-        glGenBuffers(1, &m_resampledZ);
-        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, m_resampledZ);
+        glGenBuffers(1, &m_resampledZBuffer);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, m_resampledZBuffer);
         glBufferData(GL_SHADER_STORAGE_BUFFER, resampledZBufferSize, &m_resampledZs[0], GL_DYNAMIC_DRAW);
 
         m_workGroupsNum.push_back(glm::ivec2(m_depthmap->width / RESAMPLE_WORK_GROUP_SIZE_X,
             m_depthmap->height / RESAMPLE_WORK_GROUP_SIZE_Y));
+    }
+
+    void application::setup3DWorldCoord(unsigned int programId)
+    {
+        GLsizeiptr resampledZBufferSize = m_colorImage->width * m_colorImage->height * sizeof(float);
+        GLsizeiptr world3DcoordBufferSize = m_colorImage->width * m_colorImage->height * sizeof(glm::vec3);
+
+        glGenBuffers(1, &m_resampledZBuffer);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_resampledZBuffer);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_resampledZBuffer);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, resampledZBufferSize, &m_resampledZs[0], GL_STATIC_DRAW);
+
+        glGenBuffers(1, &m_world3DCoordBuffer);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_world3DCoordBuffer);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, world3DcoordBufferSize, NULL, GL_DYNAMIC_DRAW);
+
+        GLint location = glGetUniformLocation(programId, "colorCamFocal");
+        if (location != -1)
+            glUniform1f(location, 583.f);
+        else
+            __debugbreak();
+
+        m_workGroupsNum.push_back(glm::ivec2(m_colorImage->width / WORLD3D_WORK_GROUP_SIZE_X,
+            m_colorImage->height / WORLD3D_WORK_GROUP_SIZE_Y));
+
     }
 
     void application::getDepthTrisComputeBufferOutput(glm::uvec2 workGroupNum)
@@ -228,11 +260,11 @@ namespace SceneSynthesis {
 
     void application::getDepthmapResampling(glm::uvec2 workGroupNum)
     {
-        int bufferLength = 1920 * 1920;
+        int bufferLength = m_colorImage->width * m_colorImage->height;
         glDispatchCompute(workGroupNum.x, workGroupNum.y, 1);
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_resampledZ);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_resampledZBuffer);
         float* resampledZs = (float*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
         glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
         m_resampledZs = std::vector<float>(resampledZs, resampledZs + bufferLength);
@@ -242,7 +274,20 @@ namespace SceneSynthesis {
         {
             b[i] = (unsigned char)(resampledZs[i] * 255.);
         }
-        stbi_write_png("Z.png", 1920, 1920, 1, b, 1920 * 1);
+        stbi_write_png("Z.png", m_colorImage->width, m_colorImage->height, 1, b, m_colorImage->width * 1);
+    }
+
+    void application::get3DWorldCoord(glm::vec2 workGroupNum)
+    {
+        int bufferLength = m_colorImage->width * m_colorImage->height;
+        glDispatchCompute(workGroupNum.x, workGroupNum.y, 1);
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_world3DCoordBuffer);
+        glm::vec3* world3Dcoord = (glm::vec3*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
+        glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+        m_world3Dcoord = std::vector<glm::vec3>(world3Dcoord, world3Dcoord + bufferLength);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
     }
 
     void application::run()
@@ -413,6 +458,7 @@ namespace SceneSynthesis {
         glDeleteBuffers(1, &m_depthBuffer);
         glDeleteBuffers(1, &m_zBuffer);
         glDeleteBuffers(1, &m_uvBuffer);
-        glDeleteBuffers(1, &m_resampledZ);
+        glDeleteBuffers(1, &m_resampledZBuffer);
+        glDeleteBuffers(1, &m_world3DCoordBuffer);
     }
 }

@@ -44,6 +44,8 @@ namespace SceneSynthesis {
 		void getHDGridCoordComputeBufferOutput(glm::uvec2 workGroupNum);
 		void setupDepthmapResampling(unsigned int programId);
 		void getDepthmapResampling(glm::uvec2 workGroupNum);
+		void setup3DWorldCoord(unsigned int programId);
+		void get3DWorldCoord(glm::vec2 workGroupNum);
 		void glClearErrors();
 		bool glDisplayError();
 		void processInput(GLFWwindow* window);
@@ -60,11 +62,12 @@ namespace SceneSynthesis {
 		std::vector<unsigned int> m_depthtriangles;
 		std::vector<glm::vec2> m_projectedUVs;
 		std::vector<float> m_projectedZs, m_resampledZs;
+		std::vector<glm::vec3> m_world3Dcoord;
 		GLFWwindow* m_window;
 		std::vector<GLuint> m_computeShaderPrograms;
 		std::vector<glm::ivec2> m_workGroupsNum;
 		int m_windowWidth, m_windowHeight;
-		unsigned int m_triBuffer, m_uvBuffer, m_zBuffer, m_depthBuffer, m_resampledZ;
+		unsigned int m_triBuffer, m_uvBuffer, m_zBuffer, m_depthBuffer, m_resampledZBuffer, m_world3DCoordBuffer;
 
 	};
 }
