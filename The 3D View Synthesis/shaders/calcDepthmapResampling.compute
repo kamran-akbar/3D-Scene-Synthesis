@@ -67,7 +67,7 @@ void main()
 					float newZ = z[tri1Idx1] * weight1 + z[tri1Idx2] * weight2 + z[tri1Idx3] * weight3;
 					if (zBuffer[index] > newZ)
 						zBuffer[index] = newZ;
-					barrier();
+					//barrier();
 				}
 			}
 		}
@@ -91,7 +91,7 @@ void main()
 					float newZ = z[tri2Idx1] * weight1 + z[tri2Idx2] * weight2 + z[tri2Idx3] * weight3;
 					if (zBuffer[index] > newZ)
 						zBuffer[index] = newZ;
-					barrier();
+					//barrier();
 				}
 			}
 		}

@@ -20,8 +20,8 @@ namespace SceneSynthesis {
 		struct Image
 		{
 			int width, height, channels;
-			float* pixels1D;
-			float*** pixels3D;
+			unsigned char* pixels1D;
+			float* pixels1Df;
 		};
 		struct Shader {
 			const char* filename;
@@ -35,7 +35,7 @@ namespace SceneSynthesis {
 
 	private:
 		//methods
-		std::unique_ptr<Image> loadImage(const char* filename);
+		std::unique_ptr<Image> loadImage(const char* filename, int channelNum);
 		void glfwInitialize();
 		int openGlInitialize(int width, int height);
 		void setupDepthTrisComputeBuffer(unsigned int programId);

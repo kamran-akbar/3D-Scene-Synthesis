@@ -1,6 +1,9 @@
 #include "application.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image/Stb_Image.h"
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "stb_image/stb_image_write.h"
+
 #define TRIS_WORK_GROUP_SIZE_X 20
 #define TRIS_WORK_GROUP_SIZE_Y 20
 #define PROJECT_WORK_GROUP_SIZE_X 20
@@ -17,9 +20,9 @@ namespace SceneSynthesis {
     application::application(int width, int height)
     {
         std::string filename = "ColorImage.png";
-        m_colorImage = loadImage(filename.c_str());
+        m_colorImage = loadImage(filename.c_str(), STBI_rgb_alpha);
         filename = "Depthmap.png";
-        m_depthmap = loadImage(filename.c_str());
+        m_depthmap = loadImage(filename.c_str(), STBI_grey);
         glfwInitialize();
         openGlInitialize(width, height);
     }
@@ -31,14 +34,20 @@ namespace SceneSynthesis {
     }
 
 
-    std::unique_ptr<application::Image> application::loadImage(const char* filename)
+    std::unique_ptr<application::Image> application::loadImage(const char* filename, int channelNum)
     {
         Image image;
-        image.pixels1D = stbi_loadf(filename, &image.width, &image.height, &image.channels, STBI_rgb_alpha);
+        image.pixels1D = stbi_load(filename, &image.width, &image.height, &image.channels, channelNum);
         if (image.pixels1D == NULL)
             std::cout << "Failed to load " << filename;
-        else
-            image.pixels3D = convert1DTo3D(image.pixels1D, image.width, image.height, image.channels);
+        else 
+        {
+            image.pixels1Df = new float[image.width * image.height * image.channels];
+            for (int i = 0; i < image.width * image.height * image.channels; i++)
+            {
+                image.pixels1Df[i] = (float)image.pixels1D[i] / 255.;
+            }
+        }
         return std::make_unique<Image>(image);
     }
 
@@ -112,7 +121,7 @@ namespace SceneSynthesis {
         glGenBuffers(1, &m_depthBuffer);
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_depthBuffer);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_depthBuffer);
-        glBufferData(GL_SHADER_STORAGE_BUFFER, depthBufferSize, m_depthmap->pixels1D, GL_STATIC_DRAW);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, depthBufferSize, m_depthmap->pixels1Df, GL_STATIC_DRAW);
 
         glGenBuffers(1, &m_uvBuffer);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_uvBuffer);
@@ -215,8 +224,6 @@ namespace SceneSynthesis {
         glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
         m_projectedZs = std::vector<float>(z, z + bufferLength);
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
-        
-
     }
 
     void application::getDepthmapResampling(glm::uvec2 workGroupNum)
@@ -230,13 +237,12 @@ namespace SceneSynthesis {
         glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
         m_resampledZs = std::vector<float>(resampledZs, resampledZs + bufferLength);
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
-        for (int i = 0; i < m_colorImage->height; i++) {
-            for (int j = 0; j < m_colorImage->width; j++) {
-                std::cout << m_resampledZs[i * m_colorImage->width + j] << " ";
-            }
-            std::cout << "\n\n";
+        unsigned char* b = new unsigned char[bufferLength * 1];
+        for (int i = 0; i < bufferLength * 1; i++)
+        {
+            b[i] = (unsigned char)(resampledZs[i] * 255.);
         }
-
+        stbi_write_png("Z.png", 1920, 1920, 1, b, 1920 * 1);
     }
 
     void application::run()
@@ -249,6 +255,7 @@ namespace SceneSynthesis {
             glClear(GL_COLOR_BUFFER_BIT);
             glfwSwapBuffers(m_window);
             glfwPollEvents();
+
         }
     }
 
