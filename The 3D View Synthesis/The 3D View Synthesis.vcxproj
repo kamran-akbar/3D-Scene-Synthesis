@@ -27,9 +27,13 @@
     <ClInclude Include="application.h" />
   </ItemGroup>
   <ItemGroup>
+    <Text Include="shaders\calc3DWorldCoord.compute" />
     <Text Include="shaders\calcHDGridCoord.compute" />
     <Text Include="shaders\calcTris.compute" />
     <Text Include="shaders\calcDepthmapResampling.compute" />
+    <Text Include="shaders\calcVertexData.txt" />
+    <Text Include="shaders\fragmentShader.shader" />
+    <Text Include="shaders\vertexShader.shader" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
@@ -87,8 +91,9 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>D:\Lab\The 3D View Synthesis\Includes;$(IncludePath)</IncludePath>
-    <LibraryPath>D:\Lab\The 3D View Synthesis\Libs;$(LibraryPath)</LibraryPath>
+    <IncludePath>C:\Users\cpkaak\Desktop\3D Synthesis\3D-Scene-Synthesis\Includes;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\Apps\Matlab\R2020a-64bit\bin\win64;C:\Users\cpkaak\Desktop\3D Synthesis\3D-Scene-Synthesis\Libs;D:\Lab\The 3D View Synthesis\Libs;$(LibraryPath)</LibraryPath>
+    <ExecutablePath>$(ExecutablePath)</ExecutablePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
@@ -116,12 +121,13 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
-      <AdditionalIncludeDirectories>D:\Lab\The 3D View Synthesis\glm;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\Apps\Matlab\R2020a-64bit\extern\include;C:\Users\cpkaak\Desktop\3D Synthesis\3D-Scene-Synthesis\glm;D:\Lab\The 3D View Synthesis\glm;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>glfw3.lib;opengl32.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>glfw3.lib;opengl32.lib;libmat.lib;libmx.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>C:\Apps\Matlab\R2020a-64bit\extern\lib\win64\microsoft;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">

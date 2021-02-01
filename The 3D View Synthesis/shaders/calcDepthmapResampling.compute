@@ -7,7 +7,7 @@
 #define FINAL_IMAGE_RES_Y 1920
 #define FINAL_IMAGE_RES_X 1920
 
-layout(std430, binding = 0) buffer Triangle { unsigned int triangles[]; };
+layout(std430, binding = 0) buffer Triangle {  uint triangles[]; };
 layout(std430, binding = 1) buffer UV { vec2 uv[]; };
 layout(std430, binding = 2) buffer Z { float z[]; };
 layout(std430, binding = 3) buffer ZBuffer { float zBuffer[]; };
@@ -22,13 +22,13 @@ void main()
 	if (gid.x != size.x - 1 && gid.y != size.y - 1)
 	{
 		uint triIndex = (gid.y * size.x + gid.x) * 6;
-		unsigned int tri1Idx1 = triangles[triIndex];
-		unsigned int tri1Idx2 = triangles[triIndex + 1];
-		unsigned int tri1Idx3 = triangles[triIndex + 2];
+		uint tri1Idx1 = triangles[triIndex];
+		uint tri1Idx2 = triangles[triIndex + 1];
+		uint tri1Idx3 = triangles[triIndex + 2];
 
-		unsigned int tri2Idx1 = triangles[triIndex + 3];
-		unsigned int tri2Idx2 = triangles[triIndex + 4];
-		unsigned int tri2Idx3 = triangles[triIndex + 5];
+		uint tri2Idx1 = triangles[triIndex + 3];
+		uint tri2Idx2 = triangles[triIndex + 4];
+		uint tri2Idx3 = triangles[triIndex + 5];
 
 		vec2 tri1minUV = vec2(min(min(uv[tri1Idx1].x, uv[tri1Idx2].x), uv[tri1Idx3].x), 
 			min(min(uv[tri1Idx1].y, uv[tri1Idx2].y), uv[tri1Idx3].y));
@@ -67,7 +67,6 @@ void main()
 					float newZ = z[tri1Idx1] * weight1 + z[tri1Idx2] * weight2 + z[tri1Idx3] * weight3;
 					if (zBuffer[index] > newZ)
 						zBuffer[index] = newZ;
-					//barrier();
 				}
 			}
 		}
@@ -91,7 +90,6 @@ void main()
 					float newZ = z[tri2Idx1] * weight1 + z[tri2Idx2] * weight2 + z[tri2Idx3] * weight3;
 					if (zBuffer[index] > newZ)
 						zBuffer[index] = newZ;
-					//barrier();
 				}
 			}
 		}

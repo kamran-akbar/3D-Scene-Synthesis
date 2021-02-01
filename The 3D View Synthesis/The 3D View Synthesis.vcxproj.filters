@@ -31,8 +31,12 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <Text Include="shaders\calcTris.compute" />
     <Text Include="shaders\calcHDGridCoord.compute" />
     <Text Include="shaders\calcDepthmapResampling.compute" />
+    <Text Include="shaders\calcTris.compute" />
+    <Text Include="shaders\calc3DWorldCoord.compute" />
+    <Text Include="shaders\fragmentShader.shader" />
+    <Text Include="shaders\vertexShader.shader" />
+    <Text Include="shaders\calcVertexData.txt" />
   </ItemGroup>
 </Project>

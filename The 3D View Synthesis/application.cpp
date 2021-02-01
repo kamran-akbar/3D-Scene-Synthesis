@@ -12,6 +12,8 @@
 #define RESAMPLE_WORK_GROUP_SIZE_Y 20
 #define WORLD3D_WORK_GROUP_SIZE_X 30
 #define WORLD3D_WORK_GROUP_SIZE_Y 30
+#define VERTEX_WORK_GROUP_SIZE_X 30
+#define VERTEX_WORK_GROUP_SIZE_Y 30
 
 void frameBufferSizeCallBack(GLFWwindow* window, int height, int width) 
 {
@@ -21,11 +23,15 @@ void frameBufferSizeCallBack(GLFWwindow* window, int height, int width)
 namespace SceneSynthesis {
     application::application(int width, int height)
     {
-        std::string filename = "ColorImage.png";
+        std::string filename = "Images/ColorImage.png";
         m_colorImage = loadImage(filename.c_str(), STBI_rgb_alpha);
-        filename = "Depthmap.png";
+        filename = "Images/Depthmap.png";
         m_depthmap = loadImage(filename.c_str(), STBI_grey);
-        glfwInitialize();
+		filename = "Images/ExrData.mat";
+		loadExrImage(filename.c_str());
+		m_camera = std::make_unique<Camera>(glm::vec3(0, 0, -20), glm::vec3(0, 0, 1), glm::vec3(0, 1, 0), 20, 90, -90);
+		sphericalCameraTransform(m_camera.get(), 0, 0, 0, glm::vec3(0));
+		glfwInitialize();
         openGlInitialize(width, height);
     }
 
@@ -34,7 +40,6 @@ namespace SceneSynthesis {
         destroyOpenGl();
         destroyWindow();    
     }
-
 
     std::unique_ptr<application::Image> application::loadImage(const char* filename, int channelNum)
     {
@@ -53,11 +58,61 @@ namespace SceneSynthesis {
         return std::make_unique<Image>(image);
     }
 
-    void application::glfwInitialize()
+	void application::loadExrChannelFromMatlab(const char* filename, ExrChannel* channel, const char* channelName)
+	{
+		mxArray* data;
+
+		MATFile* matFile = matOpen(filename, "r");
+
+		if (matFile == NULL) {
+			printf("Error opening file %s\n", filename);
+			return;
+		}
+
+		data = matGetVariable(matFile, channelName);
+
+		double* dataElement;
+		if (data != NULL && !mxIsEmpty(data)) {
+			// copy data
+			mwSize num = mxGetNumberOfElements(data);
+
+			dataElement = mxGetPr(data);
+
+			if (dataElement != NULL) {
+				channel->channelData = dataElement;
+				channel->nRows = mxGetM(data);
+				channel->nCols = mxGetN(data);
+				channel->size = mxGetNumberOfElements(data);
+			}
+			printf("matread_Matrix \n");
+			printf("oDoubleMat_LOC.nRows %i ; oDoubleMat_LOC.nCols %i \n", channel->nRows, channel->nCols);
+
+		}
+		else {
+			printf("nothing to read \n");
+		}
+
+		matClose(matFile);
+	}
+
+	void application::loadExrImage(const char* filename)
+	{
+		m_redChannel = std::make_unique<ExrChannel>();
+		m_greenChannel = std::make_unique<ExrChannel>();
+		m_blueChannel = std::make_unique<ExrChannel>();
+		m_depthChannel = std::make_unique<ExrChannel>();
+		loadExrChannelFromMatlab(filename, m_redChannel.get(), "R");
+		loadExrChannelFromMatlab(filename, m_greenChannel.get(), "G");
+		loadExrChannelFromMatlab(filename, m_blueChannel.get(), "B");
+		loadExrChannelFromMatlab(filename, m_depthChannel.get(), "Z");
+		std::cout << m_redChannel->channelData[2];
+	}
+	
+	void application::glfwInitialize()
     {
         glfwInit();
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     }
 
@@ -65,7 +120,7 @@ namespace SceneSynthesis {
     {
         m_windowWidth = width;
         m_windowHeight = height;
-        m_window = glfwCreateWindow(m_windowWidth, m_windowHeight, "Hello", NULL, NULL);
+        m_window = glfwCreateWindow(m_windowWidth, m_windowHeight, "3D Scene Synthesis", NULL, NULL);
         glfwMakeContextCurrent(m_window);
         if (m_window == NULL)
         {
@@ -84,21 +139,30 @@ namespace SceneSynthesis {
         glfwSetFramebufferSizeCallback(m_window, frameBufferSizeCallBack);
 
         performShader({ "shaders/calcTris.compute", GL_COMPUTE_SHADER, true });
-        setupDepthTrisComputeBuffer(m_computeShaderPrograms[m_computeShaderPrograms.size() - 1]);
+        setupDepthTrisComputeBuffer(m_shaderPrograms[m_shaderPrograms.size() - 1]);
         getDepthTrisComputeBufferOutput(m_workGroupsNum[m_workGroupsNum.size() - 1]);
 
         performShader({"shaders/calcHDGridCoord.compute", GL_COMPUTE_SHADER, true});
-        setupHDGridCoordComputeBuffer(m_computeShaderPrograms[m_computeShaderPrograms.size() - 1]);
+        setupHDGridCoordComputeBuffer(m_shaderPrograms[m_shaderPrograms.size() - 1]);
         getHDGridCoordComputeBufferOutput(m_workGroupsNum[m_workGroupsNum.size() - 1]);
 
         performShader({ "shaders/calcDepthmapResampling.compute", GL_COMPUTE_SHADER, true });
-        setupDepthmapResampling(m_computeShaderPrograms[m_computeShaderPrograms.size() - 1]);
+        setupDepthmapResampling(m_shaderPrograms[m_shaderPrograms.size() - 1]);
         getDepthmapResampling(m_workGroupsNum[m_workGroupsNum.size() - 1]);
 
-        performShader({ "shader/calc3DWorldCoord.compute", GL_COMPUTE_SHADER, true });
-        setup3DWorldCoord(m_computeShaderPrograms[m_computeShaderPrograms.size() - 1]);
+        performShader({ "shaders/calc3DWorldCoord.compute", GL_COMPUTE_SHADER, true });
+        setup3DWorldCoord(m_shaderPrograms[m_shaderPrograms.size() - 1]);
         get3DWorldCoord(m_workGroupsNum[m_workGroupsNum.size() - 1]);
 
+		performShader({ "shaders/calcTris.compute", GL_COMPUTE_SHADER, true });
+		setupTrisComputeBuffer(m_shaderPrograms[m_shaderPrograms.size() - 1]);
+		getTrisComputeBufferOutput(m_workGroupsNum[m_workGroupsNum.size() - 1]);
+
+		performShader({ "shaders/calcVertexData.txt", GL_COMPUTE_SHADER, true });
+		setupVertexData(m_shaderPrograms[m_shaderPrograms.size() - 1]);
+		getVertexData(m_workGroupsNum[m_workGroupsNum.size() - 1]);
+
+		glEnable(GL_DEPTH_TEST);
         return 0;
     }
 
@@ -110,13 +174,6 @@ namespace SceneSynthesis {
         glBufferData(GL_SHADER_STORAGE_BUFFER, triBufferSize, NULL, GL_DYNAMIC_DRAW);
         m_workGroupsNum.push_back(glm::ivec2(m_depthmap->width / TRIS_WORK_GROUP_SIZE_X, 
             m_depthmap->height / TRIS_WORK_GROUP_SIZE_Y));
-
-        GLint location = glGetUniformLocation(programId, "channels");
-        if (location != -1)
-            glUniform1i(location, m_depthmap->channels);
-        else
-            __debugbreak();
-
     }
 
     void application::setupHDGridCoordComputeBuffer(unsigned int programId)
@@ -143,7 +200,7 @@ namespace SceneSynthesis {
 
         GLint location = glGetUniformLocation(programId, "depthCamFocal");
         if (location != -1)
-            glUniform1f(location, 60.7f);
+            glUniform1f(location, 60.0f);
         else
             __debugbreak();
 
@@ -227,7 +284,39 @@ namespace SceneSynthesis {
 
     }
 
-    void application::getDepthTrisComputeBufferOutput(glm::uvec2 workGroupNum)
+	void application::setupTrisComputeBuffer(unsigned int programId)
+	{
+		GLsizeiptr triBufferSize = (m_colorImage->width - 1.0) * (m_colorImage->height - 1.0) * 6.0 * sizeof(unsigned int);
+		glGenBuffers(1, &m_triBuffer);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_triBuffer);
+		glBufferData(GL_SHADER_STORAGE_BUFFER, triBufferSize, NULL, GL_DYNAMIC_DRAW);
+		m_workGroupsNum.push_back(glm::ivec2(m_colorImage->width / TRIS_WORK_GROUP_SIZE_X,
+			m_colorImage->height / TRIS_WORK_GROUP_SIZE_Y));
+	}
+	
+	void application::setupVertexData(unsigned int programId)
+	{
+		GLsizeiptr worldCoorBufferSize = m_world3Dcoord.size() * sizeof(glm::vec3);
+		GLsizeiptr colorBufferSize = m_colorImage->width * m_colorImage->height * m_colorImage->channels * sizeof(float);
+		GLsizeiptr verticesBufferSize = m_world3Dcoord.size() * sizeof(Vertex);
+
+		glGenBuffers(1, &m_world3DCoordBuffer);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_world3DCoordBuffer);
+		glBufferData(GL_SHADER_STORAGE_BUFFER, worldCoorBufferSize, &m_world3Dcoord[0], GL_STATIC_DRAW);
+		
+		glGenBuffers(1, &m_colorBuffer);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_colorBuffer);
+		glBufferData(GL_SHADER_STORAGE_BUFFER, colorBufferSize, m_colorImage->pixels1Df, GL_STATIC_DRAW);
+
+		glGenBuffers(1, &m_vertexDataBuffer);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_vertexDataBuffer);
+		glBufferData(GL_SHADER_STORAGE_BUFFER, verticesBufferSize, NULL, GL_DYNAMIC_DRAW);
+
+		m_workGroupsNum.push_back(glm::ivec2(m_colorImage->width / VERTEX_WORK_GROUP_SIZE_X,
+			m_colorImage->height / VERTEX_WORK_GROUP_SIZE_Y));
+	}
+
+	void application::getDepthTrisComputeBufferOutput(glm::uvec2 workGroupNum)
     {
         int triBufferLength = (m_depthmap->width - 1.0) * (m_depthmap->height - 1.0) * 6.0;
         glDispatchCompute(workGroupNum.x, workGroupNum.y, 1);
@@ -256,6 +345,11 @@ namespace SceneSynthesis {
         glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
         m_projectedZs = std::vector<float>(z, z + bufferLength);
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+		/*for (int i = 0; i < m_projectedUVs.size(); i++)
+		{
+			glm::vec2 uv = m_projectedUVs[i];
+			std::cout << i << " " << uv.x << " " << uv.y << std::endl;
+		}*/
     }
 
     void application::getDepthmapResampling(glm::uvec2 workGroupNum)
@@ -270,11 +364,11 @@ namespace SceneSynthesis {
         m_resampledZs = std::vector<float>(resampledZs, resampledZs + bufferLength);
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
         unsigned char* b = new unsigned char[bufferLength * 1];
-        for (int i = 0; i < bufferLength * 1; i++)
+		for (int i = 0; i < bufferLength; i++)
         {
             b[i] = (unsigned char)(resampledZs[i] * 255.);
         }
-        stbi_write_png("Z.png", m_colorImage->width, m_colorImage->height, 1, b, m_colorImage->width * 1);
+        stbi_write_png("Images/Z.png", m_colorImage->width, m_colorImage->height, 1, b, m_colorImage->width * 1);
     }
 
     void application::get3DWorldCoord(glm::vec2 workGroupNum)
@@ -290,14 +384,134 @@ namespace SceneSynthesis {
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
     }
 
+	void application::getTrisComputeBufferOutput(glm::uvec2 workGroupNum)
+	{
+		int triBufferLength = (m_colorImage->width - 1.0) * (m_colorImage->height - 1.0) * 6.0;
+		glDispatchCompute(workGroupNum.x, workGroupNum.y, 1);
+		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_triBuffer);
+		unsigned int* triangles = (unsigned int*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
+		glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+		m_triangles = std::vector<unsigned int>(triangles, triangles + triBufferLength);
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+	}
+	
+	void application::getVertexData(glm::uvec2 workGroupNum)
+	{
+		int bufferLength = m_world3Dcoord.size();
+		glDispatchCompute(workGroupNum.x, workGroupNum.y, 1);
+		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_vertexDataBuffer);
+		Vertex* vertices = (Vertex*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
+		glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+		m_vertices = std::vector<Vertex>(vertices, vertices + bufferLength);
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+		/*for(int i = 0; i<m_vertices.size(); i++)
+		{
+			glm::vec4 position = m_vertices[i].position;
+			std::cout << position.x << " " << position.y << " " << position.z << std::endl;
+		}*/
+	}
+
+	void application::renderScene()
+	{
+		std::vector<Shader> shaders = { {"shaders/vertexShader.shader", GL_VERTEX_SHADER, true },
+			{"shaders/fragmentShader.shader", GL_FRAGMENT_SHADER, true } };
+		performShaders(shaders);
+
+		m_model = computeModelTransform(glm::vec3(0), glm::vec3(0, 0, 180));
+		m_view = computeViewTransform(m_camera->eye, m_camera->forward, m_camera->up);
+		m_projection = computeProjectionTransform(45.0, 2, 100);
+
+		m_mvp = m_projection * m_view * m_model;
+
+		glGenVertexArrays(1, &m_vertexArrayObject);
+		glBindVertexArray(m_vertexArrayObject);
+
+		glGenBuffers(1, &m_vertexBufferObject);
+		glBindBuffer(GL_ARRAY_BUFFER, m_vertexBufferObject);
+		glBufferData(GL_ARRAY_BUFFER, m_vertices.size() * sizeof(Vertex), &m_vertices[0], GL_STATIC_DRAW);
+		glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
+		glEnableVertexAttribArray(0);
+		glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)(sizeof(glm::vec4)));
+		glEnableVertexAttribArray(1);
+
+		glGenBuffers(1, &m_elementBufferObject);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_elementBufferObject);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, m_triangles.size() * sizeof(unsigned int), &m_triangles[0], GL_STATIC_DRAW);
+
+		GLint location = glGetUniformLocation(m_shaderPrograms[m_shaderPrograms.size() - 1], 
+			"mvp");
+		if (location != -1)
+			glUniformMatrix4fv(location, 1, false, &m_mvp[0][0]);
+		else
+			__debugbreak();
+	}
+
+	glm::mat4 application::computeModelTransform(const glm::vec3& translation, const glm::vec3& eulerAngles)
+	{
+		glm::mat4 model;
+		model = glm::translate(translation);
+		model = glm::rotate(model, glm::radians(eulerAngles.z), glm::vec3(0, 0, 1));
+		model = glm::rotate(model, glm::radians(eulerAngles.y), glm::vec3(0, 1, 0));
+		model = glm::rotate(model, glm::radians(eulerAngles.x), glm::vec3(1, 0, 0));
+		return model;
+	}
+
+	glm::mat4 application::computeViewTransform(const glm::vec3& eye, const glm::vec3& forward, const glm::vec3& up)
+	{
+		glm::mat4 view = glm::lookAt(eye, eye + forward, up);
+		return view;
+	}
+
+	glm::mat4 application::computeProjectionTransform(const float& fov, const float& zmin, const float& zmax)
+	{
+		glfwGetWindowSize(m_window, &m_windowWidth, &m_windowHeight);
+		glViewport(0, 0, m_windowWidth, m_windowHeight);
+		float aspect = (float)m_windowWidth / (float)m_windowHeight;
+		glm::mat4 projection = glm::perspective(glm::radians(fov), aspect, zmin, zmax);
+		return projection;
+	}
+
+	void application::sphericalCameraTransform(Camera* camera, float deltaAlpha, float deltaGama, float deltaR, const glm::vec3& center)
+	{
+		camera->gama = fmod(camera->gama + deltaGama, 360);
+		camera->alpha = glm::clamp(camera->alpha + deltaAlpha, 0.1f, 179.9f);
+		camera->r += deltaR;
+
+		glm::vec3 pos = camera->eye;
+		pos.y = camera->r * cos(glm::radians(camera->alpha));
+		pos.x = camera->r * sin(glm::radians(camera->alpha)) * cos(glm::radians(camera->gama));
+		pos.z = camera->r * sin(glm::radians(camera->alpha)) * sin(glm::radians(camera->gama));
+		camera->forward = glm::normalize(center - pos);
+		camera->up = glm::vec3(0, 1, 0);
+		camera->eye = pos;
+	}
+
+	void application::updateCamera()
+	{
+		m_view = computeViewTransform(m_camera->eye, m_camera->forward, m_camera->up);
+		m_projection = computeProjectionTransform(45.0, 2.0, 100.0);
+		m_mvp = m_projection * m_view * m_model;
+		GLint location = glGetUniformLocation(m_shaderPrograms[m_shaderPrograms.size() - 1],
+			"mvp");
+		if (location != -1)
+			glUniformMatrix4fv(location, 1, false, &m_mvp[0][0]);
+		else
+			__debugbreak();
+	}
+
     void application::run()
     {
-        
+		renderScene();
+		float angle = 0;
         while (!glfwWindowShouldClose(m_window))
         {
             processInput(m_window);
+			updateCamera();
             glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
-            glClear(GL_COLOR_BUFFER_BIT);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+			glDrawElements(GL_TRIANGLES, m_triangles.size(), GL_UNSIGNED_INT, 0);
             glfwSwapBuffers(m_window);
             glfwPollEvents();
 
@@ -321,25 +535,42 @@ namespace SceneSynthesis {
 
     void application::processInput(GLFWwindow* window)
     {
+		float speed = 0.5;
+
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         {
             glfwSetWindowShouldClose(window, true);
         }
-    }
 
-    float*** application::convert1DTo3D(float* pixels, int width, int height, int channels)
-    {
-        float*** pixels2D = new float** [height];
-        for (int i = 0; i < height; i++) {
-            pixels2D[i] = new float* [width];
-            for (int j = 0; j < width; j++) {
-                pixels2D[i][j] = new float[channels];
-                for (int c = 0; c < channels; c++) {
-                    pixels2D[i][j][c] = pixels[(i * width + j) * channels + c];
-                }
-            }
-        }
-        return pixels2D;
+		else if(glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
+		{
+			sphericalCameraTransform(m_camera.get(), 0, -speed, 0, glm::vec3(0));
+		}
+
+		else if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
+		{
+			sphericalCameraTransform(m_camera.get(), 0, speed, 0, glm::vec3(0));
+		}
+
+		else if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
+		{
+			sphericalCameraTransform(m_camera.get(), speed, 0, 0, glm::vec3(0));
+		}
+
+		else if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
+		{
+			sphericalCameraTransform(m_camera.get(), -speed, 0, 0, glm::vec3(0));
+		}
+
+		else if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+		{
+			sphericalCameraTransform(m_camera.get(), 0, 0, speed, glm::vec3(0));
+		}
+
+		else if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
+		{
+			sphericalCameraTransform(m_camera.get(), 0, 0, -speed, glm::vec3(0));
+		}
     }
 
     unsigned int application::compileShader(Shader shader)
@@ -389,16 +620,32 @@ namespace SceneSynthesis {
 
     void application::performShader(Shader shader)
     {
-        m_computeShaderPrograms.push_back(glCreateProgram());
-        int lastIndex = m_computeShaderPrograms.size() - 1;
+        m_shaderPrograms.push_back(glCreateProgram());
+        int lastIndex = m_shaderPrograms.size() - 1;
         GLuint computeShader = compileShader(shader);
-        glAttachShader(m_computeShaderPrograms[lastIndex], computeShader);
-        glLinkProgram(m_computeShaderPrograms[lastIndex]);
-        glValidateProgram(m_computeShaderPrograms[lastIndex]);
-        checkLink(m_computeShaderPrograms[lastIndex]);
+        glAttachShader(m_shaderPrograms[lastIndex], computeShader);
+        glLinkProgram(m_shaderPrograms[lastIndex]);
+        glValidateProgram(m_shaderPrograms[lastIndex]);
+        checkLink(m_shaderPrograms[lastIndex]);
         glDeleteShader(computeShader);
-        glUseProgram(m_computeShaderPrograms[lastIndex]);
+        glUseProgram(m_shaderPrograms[lastIndex]);
     }
+
+	void application::performShaders(std::vector<Shader> shaders)
+	{
+		m_shaderPrograms.push_back(glCreateProgram());
+		int lastIndex = m_shaderPrograms.size() - 1;
+		for (Shader shader : shaders)
+		{
+			GLuint s = compileShader(shader);
+			glAttachShader(m_shaderPrograms[lastIndex], s);
+			glDeleteShader(s);
+		}	
+		glLinkProgram(m_shaderPrograms[lastIndex]);
+		glValidateProgram(m_shaderPrograms[lastIndex]);
+		checkLink(m_shaderPrograms[lastIndex]);
+		glUseProgram(m_shaderPrograms[lastIndex]);
+	}
 
     unsigned int application::checkLink(unsigned int programId)
     {
@@ -416,29 +663,6 @@ namespace SceneSynthesis {
         return 1;
     }
 
-    std::vector<int> application::triangulate2DImageCPU(int width, int height, int channels)
-    {
-
-        std::vector<int> triangles;
-        triangles.resize((width - 1.0) * (height - 1.0) * 6.0);
-        int count = 0;
-        for (int i = 0; i < height - 1; i++)
-        {
-            for (int j = 0; j < width - 1; j++)
-            {
-                triangles[count++] = (i * width + j) * channels;
-                triangles[count++] = (i * width + j + 1) * channels;
-                triangles[count++] = ((i + 1) * width + j) * channels;
-
-                triangles[count++] = ((i + 1) * width + j) * channels;
-                triangles[count++] = (i * width + j + 1) * channels;
-                triangles[count++] = ((i + 1) * width + j + 1) * channels;
-            }
-        }
-
-        return triangles;
-    }
-
     void application::destroyWindow()
     {
         if (m_window != NULL)
@@ -450,9 +674,9 @@ namespace SceneSynthesis {
 
     void application::destroyOpenGl()
     {
-        for (int i = 0; i < m_computeShaderPrograms.size(); i++)
+        for (int i = 0; i < m_shaderPrograms.size(); i++)
         {
-            glDeleteProgram(m_computeShaderPrograms[i]);
+            glDeleteProgram(m_shaderPrograms[i]);
         }
         glDeleteBuffers(1, &m_triBuffer);
         glDeleteBuffers(1, &m_depthBuffer);
@@ -460,5 +684,11 @@ namespace SceneSynthesis {
         glDeleteBuffers(1, &m_uvBuffer);
         glDeleteBuffers(1, &m_resampledZBuffer);
         glDeleteBuffers(1, &m_world3DCoordBuffer);
+		glDeleteBuffers(1, &m_colorBuffer);
+		glDeleteBuffers(1, &m_vertexDataBuffer);
+		glDeleteBuffers(1, &m_vertexBufferObject);
+		glDeleteBuffers(1, &m_vertexArrayObject);
+		glDeleteBuffers(1, &m_elementBufferObject);
+		
     }
 }

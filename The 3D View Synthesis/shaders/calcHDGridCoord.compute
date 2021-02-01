@@ -20,7 +20,10 @@ void main()
 	uvec3 size = gl_NumWorkGroups * gl_WorkGroupSize;
 	uvec2 gid = gl_GlobalInvocationID.xy;
 	uint index = gid.y * size.x + gid.x;
-	float z = depthCamFocal * depths[index] / sqrt(pow(depthCamFocal, 2) + pow(gid.x, 2) + pow(gid.y, 2));
+	//float z = depthCamFocal * depths[index] / sqrt(pow(depthCamFocal, 2) + pow(gid.x, 2) + pow(gid.y, 2));
+	float z = depths[index];
+	if (z == 0)
+		z = 1e-5;
 	float x = gid.x * z / depthCamFocal;
 	float y = gid.y * z / depthCamFocal;
 	vec4 coord = vec4(x, y, z, 1);
