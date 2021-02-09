@@ -32,18 +32,21 @@ namespace SceneSynthesis {
 			bool checkError;
 		};
 		struct Camera {
-			glm::vec3 eye;
-			glm::vec3 forward;
-			glm::vec3 up;
-			float r, alpha, gama;
-			Camera(glm::vec3 eye, glm::vec3 forward, glm::vec3 up, float r, float alpha, float gama)
+			glm::vec3 eye, up, forward;
+			float fov, zmin, zmax;
+			float alpha, gama, r;
+			Camera(glm::vec3 eye, glm::vec3 forward, glm::vec3 up, float fov, float zmin, float zmax,
+				float r, float alpha, float gama)
 			{
 				this->eye = eye;
 				this->forward = forward;
 				this->up = up;
-				this->r = r;
+				this->zmin = zmin;
+				this->zmax = zmax;
+				this->fov = fov;
 				this->alpha = alpha;
 				this->gama = gama;
+				this->r = r;
 			}
 		};
 		struct Vertex
@@ -98,7 +101,7 @@ namespace SceneSynthesis {
 		glm::mat4 computeProjectionTransform(const float& fov, const float& zmin, const float& zmax);
 		glm::mat4 computeViewTransform(const glm::vec3& eye, const glm::vec3& forward, const glm::vec3& up);
 		
-		void sphericalCameraTransform(Camera* camera, float deltaAlpha, float deltaGama, float deltaR, const glm::vec3& center);
+		void CameraTransform(Camera* camera, float deltaAlpha, float deltaGama, float deltaR, const glm::vec3& center);
 		
 		void processInput(GLFWwindow* window);
 		
@@ -120,7 +123,7 @@ namespace SceneSynthesis {
 		std::unique_ptr<ExrChannel> m_redChannel, m_greenChannel, m_blueChannel, m_depthChannel;
 		std::vector<unsigned int> m_depthtriangles, m_triangles;
 		std::vector<glm::vec2> m_projectedUVs;
-		std::vector<float> m_projectedZs, m_resampledZs;
+		std::vector<double> m_projectedZs, m_resampledZs;
 		std::vector<glm::vec3> m_world3Dcoord;
 		
 		glm::mat4 m_model, m_view, m_projection, m_mvp;
@@ -131,7 +134,9 @@ namespace SceneSynthesis {
 		int m_windowWidth, m_windowHeight;
 
 		unsigned int m_triBuffer, m_uvBuffer, m_zBuffer, m_depthBuffer, m_resampledZBuffer, m_world3DCoordBuffer,
-			m_colorBuffer, m_vertexDataBuffer, m_vertexBufferObject, m_vertexArrayObject, m_elementBufferObject;
+			m_redBuffer, m_greenBuffer, m_blueBuffer, m_vertexDataBuffer, m_vertexBufferObject, m_vertexArrayObject, 
+			m_elementBufferObject;
+		unsigned int m_testBuffer;
 		
 
 	};

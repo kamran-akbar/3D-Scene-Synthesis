@@ -17,13 +17,16 @@ void main()
 	uvec2 gid = gl_GlobalInvocationID.xy;
     if (gid.x != size.x - 1 && gid.y != size.y - 1)
     {
-	    uint index = (gid.y * size.x + gid.x) * 6;
-	    triangles[index] = gid.y * size.x + gid.x;
-        triangles[index + 1] = gid.y * size.x + gid.x + 1;
-        triangles[index + 2] = (gid.y + 1) * size.x + gid.x;
-
-        triangles[index + 3] = (gid.y + 1) * size.x + gid.x;
-        triangles[index + 4] = gid.y * size.x + gid.x + 1;
-        triangles[index + 5] = (gid.y + 1) * size.x + gid.x + 1;
+	    uint index = (gid.x * size.y + gid.y) * 6;
+	    triangles[index] = gid.x * size.y + gid.y;
+		triangles[index + 1] = (gid.x + 1) * size.y + gid.y;
+		triangles[index + 2] = gid.x * size.y + gid.y + 1;
+		
+        
+        triangles[index + 3] = (gid.x + 1) * size.y + gid.y;
+		triangles[index + 4] = (gid.x + 1) * size.y + gid.y + 1;
+		triangles[index + 5] = gid.x * size.y + gid.y + 1;
+		
+        
     }
 }

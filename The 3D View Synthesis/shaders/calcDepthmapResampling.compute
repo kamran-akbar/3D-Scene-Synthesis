@@ -4,16 +4,15 @@
 
 #define WORK_GROUP_SIZE_X 20
 #define WORK_GROUP_SIZE_Y 20
-#define FINAL_IMAGE_RES_Y 1920
+#define FINAL_IMAGE_RES_Y 1080
 #define FINAL_IMAGE_RES_X 1920
 
 layout(std430, binding = 0) buffer Triangle {  uint triangles[]; };
 layout(std430, binding = 1) buffer UV { vec2 uv[]; };
-layout(std430, binding = 2) buffer Z { float z[]; };
-layout(std430, binding = 3) buffer ZBuffer { float zBuffer[]; };
+layout(std430, binding = 2) buffer Z { double z[]; };
+layout(std430, binding = 3) buffer ZBuffer { double zBuffer[]; };
+layout(std430, binding = 4) buffer TestBuffer { double test[]; };
 layout(local_size_x = WORK_GROUP_SIZE_X, local_size_y = WORK_GROUP_SIZE_Y, local_size_z = 1) in;
-
-shared float sharedZbuffer[FINAL_IMAGE_RES_Y * FINAL_IMAGE_RES_X];
 
 void main()
 {
@@ -21,7 +20,7 @@ void main()
 	uvec2 gid = gl_GlobalInvocationID.xy;
 	if (gid.x != size.x - 1 && gid.y != size.y - 1)
 	{
-		uint triIndex = (gid.y * size.x + gid.x) * 6;
+		uint triIndex = (gid.x * size.y + gid.y) * 6;
 		uint tri1Idx1 = triangles[triIndex];
 		uint tri1Idx2 = triangles[triIndex + 1];
 		uint tri1Idx3 = triangles[triIndex + 2];
@@ -40,56 +39,69 @@ void main()
 		vec2 tri2maxUV = vec2(max(max(uv[tri2Idx1].x, uv[tri2Idx2].x), uv[tri2Idx3].x),
 			max(max(uv[tri2Idx1].y, uv[tri2Idx2].y), uv[tri2Idx3].y));
 
-		uvec2 tri1uv1 = uvec2(uv[tri1Idx1].x, uv[tri1Idx1].y);
-		uvec2 tri1uv2 = uvec2(uv[tri1Idx2].x, uv[tri1Idx2].y);
-		uvec2 tri1uv3 = uvec2(uv[tri1Idx3].x, uv[tri1Idx3].y);
+		vec2 tri1uv1 = vec2(uv[tri1Idx1].x, uv[tri1Idx1].y);
+		vec2 tri1uv2 = vec2(uv[tri1Idx2].x, uv[tri1Idx2].y);
+		vec2 tri1uv3 = vec2(uv[tri1Idx3].x, uv[tri1Idx3].y);
 
-		uvec2 tri2uv1 = uvec2(uv[tri2Idx1].x, uv[tri2Idx1].y);
-		uvec2 tri2uv2 = uvec2(uv[tri2Idx2].x, uv[tri2Idx2].y);
-		uvec2 tri2uv3 = uvec2(uv[tri2Idx3].x, uv[tri2Idx3].y);
+		vec2 tri2uv1 = vec2(uv[tri2Idx1].x, uv[tri2Idx1].y);
+		vec2 tri2uv2 = vec2(uv[tri2Idx2].x, uv[tri2Idx2].y);
+		vec2 tri2uv3 = vec2(uv[tri2Idx3].x, uv[tri2Idx3].y);
 		
-		for (int i = int(tri1minUV.y); i < int(tri1maxUV.y); i++)
+		for (int i = int(tri1minUV.y); i < int(tri1maxUV.y) + 1; i++)
 		{
-			for (int j = int(tri1minUV.x); j < int(tri1maxUV.x); j++)
+			for (int j = int(tri1minUV.x); j < int(tri1maxUV.x) + 1; j++)
 			{
-				float weight1 = ((tri1uv2.y - tri1uv3.y) * (j - tri1uv3.x) + (tri1uv3.x - tri1uv2.x) * (i - tri1uv3.y))
-				/ ((tri1uv2.y - tri1uv3.y) * (tri1uv1.x - tri1uv3.x) + (tri1uv3.x - tri1uv2.x) * (tri1uv1.y - tri1uv3.y));
-				float weight2 = ((tri1uv3.y - tri1uv1.y) * (j - tri1uv3.x) + (tri1uv1.x - tri1uv3.x) * (i - tri1uv3.y)) 
-				/ ((tri1uv2.y - tri1uv3.y) * (tri1uv1.x - tri1uv3.x) + (tri1uv3.x - tri1uv2.x) * (tri1uv1.y - tri1uv3.y));
-				float weight3 = 1 - weight1 - weight2;
-				if (weight1 < 0 || weight2 < 0 || weight3 < 0)
+				if (i < FINAL_IMAGE_RES_Y && j < FINAL_IMAGE_RES_X)
 				{
-					continue;
-				}
-				else 
-				{
-					uint index = i * FINAL_IMAGE_RES_X + j;
-					float newZ = z[tri1Idx1] * weight1 + z[tri1Idx2] * weight2 + z[tri1Idx3] * weight3;
-					if (zBuffer[index] > newZ)
-						zBuffer[index] = newZ;
+					float denom = (tri1uv2.y - tri1uv3.y) * (tri1uv1.x - tri1uv3.x) + (tri1uv3.x - tri1uv2.x) * (tri1uv1.y - tri1uv3.y);
+					float weight1 = ((tri1uv2.y - tri1uv3.y) * (j - tri1uv3.x) + (tri1uv3.x - tri1uv2.x) * (i - tri1uv3.y)) / denom;
+					float weight2 = ((tri1uv3.y - tri1uv1.y) * (j - tri1uv3.x) + (tri1uv1.x - tri1uv3.x) * (i - tri1uv3.y)) / denom;
+					float weight3 = 1 - weight1 - weight2;
+
+					if (weight1 < 0 || weight2 < 0)
+					{
+
+						continue;
+					}
+					else
+					{
+						uint index = j * FINAL_IMAGE_RES_Y + i;
+						double newZ = z[tri1Idx1] * weight1 + z[tri1Idx2] * weight2 + z[tri1Idx3] * weight3;
+
+						if (zBuffer[index] > newZ)
+						{
+							if (index == 1080)
+								test[0] = i;
+							zBuffer[index] = newZ;
+						}
+					}
 				}
 			}
 		}
 		
-		for (int i = int(tri2minUV.y); i < int(tri2maxUV.y); i++)
+		for (int i = int(tri2minUV.y); i < int(tri2maxUV.y) + 1; i++)
 		{
-			for (int j = int(tri2minUV.x); j < int(tri2maxUV.x); j++)
+			for (int j = int(tri2minUV.x); j < int(tri2maxUV.x) + 1; j++)
 			{
-				float weight1 = ((tri2uv2.y - tri2uv3.y) * (j - tri2uv3.x) + (tri2uv3.x - tri2uv2.x) * (i - tri2uv3.y))
-					/ ((tri2uv2.y - tri2uv3.y) * (tri2uv1.x - tri2uv3.x) + (tri2uv3.x - tri2uv2.x) * (tri2uv1.y - tri2uv3.y));
-				float weight2 = ((tri2uv3.y - tri2uv1.y) * (j - tri2uv3.x) + (tri2uv1.x - tri2uv3.x) * (i - tri2uv3.y))
-					/ ((tri2uv2.y - tri2uv3.y) * (tri2uv1.x - tri2uv3.x) + (tri2uv3.x - tri2uv2.x) * (tri2uv1.y - tri2uv3.y));
-				float weight3 = 1 - weight1 - weight2;
-				if (weight1 < 0 || weight2 < 0 || weight3 < 0)
+				if (i < FINAL_IMAGE_RES_Y && j < FINAL_IMAGE_RES_X)
 				{
-					continue;
-				}
-				else
-				{
-					uint index = i * FINAL_IMAGE_RES_X + j;
-					float newZ = z[tri2Idx1] * weight1 + z[tri2Idx2] * weight2 + z[tri2Idx3] * weight3;
-					if (zBuffer[index] > newZ)
-						zBuffer[index] = newZ;
+					float denom = (tri2uv2.y - tri2uv3.y) * (tri2uv1.x - tri2uv3.x) + (tri2uv3.x - tri2uv2.x) * (tri2uv1.y - tri2uv3.y);
+					float weight1 = ((tri2uv2.y - tri2uv3.y) * (j - tri2uv3.x) + (tri2uv3.x - tri2uv2.x) * (i - tri2uv3.y)) / denom;
+					float weight2 = ((tri2uv3.y - tri2uv1.y) * (j - tri2uv3.x) + (tri2uv1.x - tri2uv3.x) * (i - tri2uv3.y)) / denom;
+					float weight3 = 1 - weight1 - weight2;
+
+					if (weight1 < 0 || weight2 < 0)
+					{
+						continue;
+					}
+					else
+					{
+						uint index = j * FINAL_IMAGE_RES_Y + i;
+						double newZ = z[tri2Idx1] * weight1 + z[tri2Idx2] * weight2 + z[tri2Idx3] * weight3;
+
+						if (zBuffer[index] > newZ)
+							zBuffer[index] = newZ;
+					}
 				}
 			}
 		}

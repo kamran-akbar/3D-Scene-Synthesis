@@ -31,7 +31,7 @@
     <Text Include="shaders\calcHDGridCoord.compute" />
     <Text Include="shaders\calcTris.compute" />
     <Text Include="shaders\calcDepthmapResampling.compute" />
-    <Text Include="shaders\calcVertexData.txt" />
+    <Text Include="shaders\calcVertexData.compute" />
     <Text Include="shaders\fragmentShader.shader" />
     <Text Include="shaders\vertexShader.shader" />
   </ItemGroup>

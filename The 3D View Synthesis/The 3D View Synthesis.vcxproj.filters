@@ -37,6 +37,6 @@
     <Text Include="shaders\calc3DWorldCoord.compute" />
     <Text Include="shaders\fragmentShader.shader" />
     <Text Include="shaders\vertexShader.shader" />
-    <Text Include="shaders\calcVertexData.txt" />
+    <Text Include="shaders\calcVertexData.compute" />
   </ItemGroup>
 </Project>

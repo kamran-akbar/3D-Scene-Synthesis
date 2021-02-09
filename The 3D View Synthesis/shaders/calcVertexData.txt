@@ -12,15 +12,17 @@ struct Vertex
 };
 
 layout(std430, binding = 0) buffer Position { vec3 positions[]; };
-layout(std430, binding = 1) buffer Color { float colors[]; };
-layout(std430, binding = 2) buffer VertexData { Vertex vertices[]; };
+layout(std430, binding = 1) buffer Red { double red[]; };
+layout(std430, binding = 2) buffer Green { double green[]; };
+layout(std430, binding = 3) buffer Blue { double blue[]; };
+layout(std430, binding = 4) buffer VertexData { Vertex vertices[]; };
 layout(local_size_x = WORK_GROUP_SIZE_X, local_size_y = WORK_GROUP_SIZE_Y, local_size_z = 1) in;
 
 void main()
 {
 	uvec3 size = gl_NumWorkGroups * gl_WorkGroupSize;
 	uvec2 gid = gl_GlobalInvocationID.xy;
-	uint index = gid.y * size.x + gid.x;
+	uint index = gid.x * size.y + gid.y;
 	vertices[index].position = vec4(positions[index].x, positions[index].y, positions[index].z, 1.0f);
-	vertices[index].color = vec4(colors[index * 4], colors[index * 4 + 1], colors[index * 4 + 2], colors[index * 4 + 3]);
+	vertices[index].color = vec4(float(red[index]), float(green[index]), float(blue[index]), 1.0f);
 }
