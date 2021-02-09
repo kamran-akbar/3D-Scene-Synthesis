@@ -10,8 +10,8 @@
 #define PROJECT_WORK_GROUP_SIZE_Y 20
 #define RESAMPLE_WORK_GROUP_SIZE_X 20
 #define RESAMPLE_WORK_GROUP_SIZE_Y 20
-#define WORLD3D_WORK_GROUP_SIZE_X 30
-#define WORLD3D_WORK_GROUP_SIZE_Y 30
+#define WORLD3D_WORK_GROUP_SIZE_X 20
+#define WORLD3D_WORK_GROUP_SIZE_Y 20
 #define VERTEX_WORK_GROUP_SIZE_X 30
 #define VERTEX_WORK_GROUP_SIZE_Y 30
 
@@ -25,7 +25,7 @@ namespace SceneSynthesis {
     {
 		std::string filename = "Images/ExrData.mat";
 		loadExrImage(filename.c_str());
-		m_camera = std::make_unique<Camera>(glm::vec3(0, 0, -3), glm::vec3(0, 0, 1), glm::vec3(0, 1, 0), 117, 0.2, 3000,
+		m_camera = std::make_unique<Camera>(glm::vec3(0, 0, -3), glm::vec3(0, 0, 1), glm::vec3(0, 1, 0), 117, 0.00001, 300,
 			3, 90, -90);
 		CameraTransform(m_camera.get(), 0, 0, 0, glm::vec3(0));
 		glfwInitialize();
@@ -253,7 +253,8 @@ namespace SceneSynthesis {
     {
 		int colorChannelSize = m_redChannel->nCols * m_redChannel->nRows;
 		GLsizeiptr resampledZBufferSize =  colorChannelSize * sizeof(double);
-        GLsizeiptr world3DcoordBufferSize = colorChannelSize * sizeof(glm::vec3);
+        GLsizeiptr world3DcoordBufferSize = colorChannelSize * sizeof(glm::vec4);
+		m_world3Dcoord = std::vector<glm::vec4>(world3DcoordBufferSize, glm::vec4(10));
 
         glGenBuffers(1, &m_resampledZBuffer);
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_resampledZBuffer);
@@ -262,7 +263,7 @@ namespace SceneSynthesis {
 
         glGenBuffers(1, &m_world3DCoordBuffer);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_world3DCoordBuffer);
-        glBufferData(GL_SHADER_STORAGE_BUFFER, world3DcoordBufferSize, NULL, GL_DYNAMIC_DRAW);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, world3DcoordBufferSize, &m_world3Dcoord[0], GL_DYNAMIC_DRAW);
 
         GLint location = glGetUniformLocation(programId, "colorCamFocal");
         if (location != -1)
@@ -288,7 +289,7 @@ namespace SceneSynthesis {
 	void application::setupVertexData(unsigned int programId)
 	{
 		int bufferSize = m_redChannel->nCols * m_redChannel->nRows;
-		GLsizeiptr worldCoorBufferSize = bufferSize * sizeof(glm::vec3);
+		GLsizeiptr worldCoorBufferSize = bufferSize * sizeof(glm::vec4);
 		GLsizeiptr colorBufferSize = bufferSize * sizeof(double);
 		GLsizeiptr verticesBufferSize = bufferSize * sizeof(Vertex);
 
@@ -343,11 +344,13 @@ namespace SceneSynthesis {
         glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
         m_projectedUVs = std::vector<glm::vec2>(uv, uv + bufferLength);
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_zBuffer);
         double* z = (double*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
         glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
         m_projectedZs = std::vector<double>(z, z + bufferLength);
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
 		std::cout << "UV : " << std::endl;
 		glm::vec2 m = m_projectedUVs[642 * 720 + 450];
 		std::cout << m.x << " " << m.y << std::endl;
@@ -394,11 +397,15 @@ namespace SceneSynthesis {
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_world3DCoordBuffer);
-        glm::vec3* world3Dcoord = (glm::vec3*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
+        glm::vec4* world3Dcoord = (glm::vec4*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
         glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
-        m_world3Dcoord = std::vector<glm::vec3>(world3Dcoord, world3Dcoord + bufferLength);
+        m_world3Dcoord = std::vector<glm::vec4>(world3Dcoord, world3Dcoord + bufferLength);
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
-		std::cout << m_resampledZs[1] << " " << m_world3Dcoord[1].z << std::endl;
+		/*for (int i = 0; i < m_world3Dcoord.size(); i++)
+		{
+			glm::vec3 position = m_world3Dcoord[i];
+			std::cout << i << " " << position.x << " " << position.y << " " << position.z << std::endl;
+		}*/
     }
 
 	void application::getTrisComputeBufferOutput(glm::uvec2 workGroupNum)
@@ -426,19 +433,18 @@ namespace SceneSynthesis {
 		glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
 		m_vertices = std::vector<Vertex>(vertices, vertices + bufferLength);
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
-		float maxY = -100, zz;
+		/*float maxY = -100, zz;
 		int index = 0;
-		//for(int i = 0; i<m_vertices.size(); i++)
-		//{
-		//	glm::vec4 position = m_vertices[i].position;
-		//	//if (abs(position.z) < 0.01 && abs(position.x) < 0.01)
-		//		//std::cout << i << " " << position.x << " " << position.y << " " << position.z << std::endl;
-		//	if (position.y >= maxY) {
-		//		maxY = position.y;
-		//		zz = position.z;
-		//		index = i;
-		//	}
-		//}
+		for(int i = 0; i<m_vertices.size(); i++)
+		{
+			glm::vec4 position = m_vertices[i].position;
+			std::cout << i << " " << position.x << " " << position.y << " " << position.z << std::endl;
+			if (position.y >= maxY) {
+				maxY = position.y;
+				zz = position.z;
+				index = i;
+			}
+		}*/
 	}
 
 	void application::renderScene()
@@ -562,8 +568,6 @@ namespace SceneSynthesis {
 
     void application::processInput(GLFWwindow* window)
     {
-		float speed = 0.5;
-
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         {
             glfwSetWindowShouldClose(window, true);
@@ -571,32 +575,44 @@ namespace SceneSynthesis {
 
 		else if(glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
 		{
-			CameraTransform(m_camera.get(), 0, -speed, 0, glm::vec3(0));
+			CameraTransform(m_camera.get(), 0, -m_rspeed, 0, glm::vec3(0));
 		}
 
 		else if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
 		{
-			CameraTransform(m_camera.get(), 0, speed, 0, glm::vec3(0));
+			CameraTransform(m_camera.get(), 0, m_rspeed, 0, glm::vec3(0));
 		}
 
 		else if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
 		{
-			CameraTransform(m_camera.get(), speed, 0, 0, glm::vec3(0));
+			CameraTransform(m_camera.get(), m_rspeed, 0, 0, glm::vec3(0));
 		}
 
 		else if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
 		{
-			CameraTransform(m_camera.get(), -speed, 0, 0, glm::vec3(0));
+			CameraTransform(m_camera.get(), -m_rspeed, 0, 0, glm::vec3(0));
 		}
 
 		else if(glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
 		{
-			CameraTransform(m_camera.get(), 0, 0, speed, glm::vec3(0));
+			CameraTransform(m_camera.get(), 0, 0, m_tspeed, glm::vec3(0));
 		}
 
 		else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
 		{
-			CameraTransform(m_camera.get(), 0, 0, -speed, glm::vec3(0));
+			CameraTransform(m_camera.get(), 0, 0, -m_tspeed, glm::vec3(0));
+		}
+
+		else if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+		{
+			m_tspeed *= 1.1;
+			std::cout << m_tspeed << std::endl;
+		}
+
+		else if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
+		{
+			m_tspeed *= 0.99;
+			std::cout << m_tspeed << std::endl;
 		}
 
     }

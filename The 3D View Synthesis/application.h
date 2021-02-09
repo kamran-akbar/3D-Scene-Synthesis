@@ -124,7 +124,7 @@ namespace SceneSynthesis {
 		std::vector<unsigned int> m_depthtriangles, m_triangles;
 		std::vector<glm::vec2> m_projectedUVs;
 		std::vector<double> m_projectedZs, m_resampledZs;
-		std::vector<glm::vec3> m_world3Dcoord;
+		std::vector<glm::vec4> m_world3Dcoord;
 		
 		glm::mat4 m_model, m_view, m_projection, m_mvp;
 		std::unique_ptr<Camera> m_camera;
@@ -137,6 +137,8 @@ namespace SceneSynthesis {
 			m_redBuffer, m_greenBuffer, m_blueBuffer, m_vertexDataBuffer, m_vertexBufferObject, m_vertexArrayObject, 
 			m_elementBufferObject;
 		unsigned int m_testBuffer;
+
+		float m_rspeed = 0.5, m_tspeed = 0.01;
 		
 
 	};
