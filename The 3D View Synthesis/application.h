@@ -3,11 +3,13 @@
 #include <glfw3.h>
 #include <iostream>
 #include <vector>
+#include <ctime>
 #include "mat.h"
 #include "math.h"
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
 #include "glm/gtx/rotate_vector.hpp"
+
 
 #define ASSERT(x) \
 	if (!(x))     \
@@ -101,8 +103,9 @@ namespace SceneSynthesis {
 		glm::mat4 computeProjectionTransform(const float& fov, const float& zmin, const float& zmax);
 		glm::mat4 computeViewTransform(const glm::vec3& eye, const glm::vec3& forward, const glm::vec3& up);
 		
-		void CameraTransform(Camera* camera, float deltaAlpha, float deltaGama, float deltaR, const glm::vec3& center);
-		
+		void sphericalCameraTransform(Camera* camera, float deltaAlpha, float deltaGama, float deltaR, const glm::vec3& center);
+		void cartesianCameraTransform(Camera* camera, glm::vec3 deltaPosition, glm::vec3 deltaRotation);
+		void modifyFieldOfView(float speed);
 		void processInput(GLFWwindow* window);
 		
 		void performShader(Shader shader);
@@ -138,9 +141,7 @@ namespace SceneSynthesis {
 			m_elementBufferObject;
 		unsigned int m_testBuffer;
 
-		float m_rspeed = 0.5, m_tspeed = 0.01;
-		
-
+		float m_rspeed = 0.5, m_tspeed = 0.01, m_fovSpeed = 0.1;
 	};
 }
 

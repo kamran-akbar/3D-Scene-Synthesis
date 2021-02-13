@@ -27,7 +27,7 @@ namespace SceneSynthesis {
 		loadExrImage(filename.c_str());
 		m_camera = std::make_unique<Camera>(glm::vec3(0, 0, -3), glm::vec3(0, 0, 1), glm::vec3(0, 1, 0), 117, 0.00001, 300,
 			3, 90, -90);
-		CameraTransform(m_camera.get(), 0, 0, 0, glm::vec3(0));
+		cartesianCameraTransform(m_camera.get(), glm::vec3(0), glm::vec3(0));
 		glfwInitialize();
         openGlInitialize(width, height);
     }
@@ -453,7 +453,7 @@ namespace SceneSynthesis {
 			{"shaders/fragmentShader.shader", GL_FRAGMENT_SHADER, true } };
 		performShaders(shaders);
 
-		m_model = computeModelTransform(glm::vec3(0), glm::vec3(0, 0, 180));
+		m_model = computeModelTransform(glm::vec3(0, 0, -2), glm::vec3(0, 0, 180));
 		m_view = computeViewTransform(m_camera->eye, m_camera->forward, m_camera->up);
 		m_projection = computeProjectionTransform(m_camera->fov, m_camera->zmin, m_camera->zmax);
 
@@ -507,7 +507,7 @@ namespace SceneSynthesis {
 		return projection;
 	}
 
-	void application::CameraTransform(Camera* camera, float deltaAlpha, float deltaGama, float deltaR, const glm::vec3& center)
+	void application::sphericalCameraTransform(Camera* camera, float deltaAlpha, float deltaGama, float deltaR, const glm::vec3& center)
 	{
 		camera->gama = fmod(camera->gama + deltaGama, 360);
 		camera->alpha = glm::clamp(camera->alpha + deltaAlpha, 0.1f, 179.9f);
@@ -522,6 +522,32 @@ namespace SceneSynthesis {
 		camera->eye = pos;
 	}
 
+	void application::cartesianCameraTransform(Camera* camera, glm::vec3 deltaPosition, glm::vec3 deltaRotation)
+	{
+		camera->eye += deltaPosition;
+		deltaRotation = glm::vec3(glm::radians(deltaRotation.x), glm::radians(deltaRotation.y),
+			glm::radians(deltaRotation.z));
+
+		if (deltaRotation.x != 0) 
+		{
+			camera->forward = glm::rotateX(camera->forward, deltaRotation.x);
+			camera->up = glm::rotateX(camera->up, deltaRotation.x);
+		}
+		else if (deltaRotation.y != 0)
+		{
+			camera->forward = glm::rotateY(camera->forward, deltaRotation.y);
+		}
+		else if (deltaRotation.z != 0)
+		{
+			camera->up = glm::rotateZ(camera->up, deltaRotation.z);
+		}
+	}
+
+	void application::modifyFieldOfView(float speed)
+	{
+		m_camera->fov += speed;
+	}
+	
 	void application::updateCamera()
 	{
 		m_view = computeViewTransform(m_camera->eye, m_camera->forward, m_camera->up);
@@ -539,15 +565,27 @@ namespace SceneSynthesis {
     {
 		renderScene();
 		float angle = 0;
+		clock_t beginTime, deltaTime, beginTick, deltaTick;
+		clock_t fps = 0.0, interval = 1000.0;
+		beginTime = clock();
         while (!glfwWindowShouldClose(m_window))
         {
+			beginTick = clock();
             processInput(m_window);
 			updateCamera();
-            glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+            glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 			glDrawElements(GL_TRIANGLES, m_triangles.size(), GL_UNSIGNED_INT, 0);
             glfwSwapBuffers(m_window);
             glfwPollEvents();
+			deltaTick = clock() - beginTick;
+			if (deltaTick > 0)
+				fps = CLOCKS_PER_SEC / deltaTick;
+			if (clock() - beginTime > interval)
+			{
+				std::cout << "Frame per Second is : " << fps << std::endl;
+				beginTime = clock();
+			}
         }
     }
 
@@ -575,46 +613,73 @@ namespace SceneSynthesis {
 
 		else if(glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
 		{
-			CameraTransform(m_camera.get(), 0, -m_rspeed, 0, glm::vec3(0));
+			cartesianCameraTransform(m_camera.get(), glm::vec3(m_tspeed, 0, 0), glm::vec3(0));
 		}
 
 		else if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
 		{
-			CameraTransform(m_camera.get(), 0, m_rspeed, 0, glm::vec3(0));
+			cartesianCameraTransform(m_camera.get(), glm::vec3(-m_tspeed, 0, 0), glm::vec3(0));
 		}
 
 		else if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
 		{
-			CameraTransform(m_camera.get(), m_rspeed, 0, 0, glm::vec3(0));
+			cartesianCameraTransform(m_camera.get(), glm::vec3(0, m_tspeed, 0), glm::vec3(0));
 		}
 
 		else if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
 		{
-			CameraTransform(m_camera.get(), -m_rspeed, 0, 0, glm::vec3(0));
+			cartesianCameraTransform(m_camera.get(), glm::vec3(0, -m_tspeed, 0), glm::vec3(0));
 		}
 
 		else if(glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
 		{
-			CameraTransform(m_camera.get(), 0, 0, m_tspeed, glm::vec3(0));
+			cartesianCameraTransform(m_camera.get(), glm::vec3(0, 0, m_tspeed), glm::vec3(0));
 		}
 
 		else if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
 		{
-			CameraTransform(m_camera.get(), 0, 0, -m_tspeed, glm::vec3(0));
+			cartesianCameraTransform(m_camera.get(), glm::vec3(0, 0, -m_tspeed), glm::vec3(0));
+		}
+
+		else if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+		{
+			cartesianCameraTransform(m_camera.get(), glm::vec3(0), glm::vec3(0, m_rspeed, 0));
+		}
+
+		else if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+		{
+			cartesianCameraTransform(m_camera.get(), glm::vec3(0), glm::vec3(0, -m_rspeed, 0));
+		}
+
+		else if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+		{
+			cartesianCameraTransform(m_camera.get(), glm::vec3(0), glm::vec3(m_rspeed, 0, 0));
+		}
+
+		else if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+		{
+			cartesianCameraTransform(m_camera.get(), glm::vec3(0), glm::vec3(-m_rspeed, 0, 0));
 		}
 
 		else if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
 		{
-			m_tspeed *= 1.1;
-			std::cout << m_tspeed << std::endl;
+			cartesianCameraTransform(m_camera.get(), glm::vec3(0), glm::vec3(0, 0, m_rspeed));
 		}
 
 		else if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
 		{
-			m_tspeed *= 0.99;
-			std::cout << m_tspeed << std::endl;
+			cartesianCameraTransform(m_camera.get(), glm::vec3(0), glm::vec3(0, 0, -m_rspeed));
 		}
 
+		else if (glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS)
+		{
+			modifyFieldOfView(m_fovSpeed);
+		}
+
+		else if (glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS)
+		{
+			modifyFieldOfView(-m_fovSpeed);
+		}
     }
 
     unsigned int application::compileShader(Shader shader)
