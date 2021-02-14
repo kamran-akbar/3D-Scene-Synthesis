@@ -23,9 +23,16 @@ void frameBufferSizeCallBack(GLFWwindow* window, int height, int width)
 namespace SceneSynthesis {
     application::application(int width, int height)
     {
-		std::string filename = "Images/ExrData.mat";
+		std::string filename = "Images/ExrData1280.mat";
+		m_sceneLength = 1.0077;
+		m_zmin = 0.3726;
 		loadExrImage(filename.c_str());
-		m_camera = std::make_unique<Camera>(glm::vec3(0, 0, -3), glm::vec3(0, 0, 1), glm::vec3(0, 1, 0), 117, 0.00001, 300,
+		if (m_depthChannel->nCols == m_redChannel->nCols && m_depthChannel->nRows == m_redChannel->nRows)
+			m_sameResoloution = true;
+		else
+			m_sameResoloution = false;
+		std::cout << "Same Res flag: " << m_sameResoloution << std::endl;
+		m_camera = std::make_unique<Camera>(glm::vec3(-6.49, -3.47, -7.68), glm::vec3(0, 0, 1), glm::vec3(0, 1, 0), 60, 0.0001, 300,
 			3, 90, -90);
 		cartesianCameraTransform(m_camera.get(), glm::vec3(0), glm::vec3(0));
 		glfwInitialize();
@@ -140,9 +147,12 @@ namespace SceneSynthesis {
         setupHDGridCoordComputeBuffer(m_shaderPrograms[m_shaderPrograms.size() - 1]);
         getHDGridCoordComputeBufferOutput(m_workGroupsNum[m_workGroupsNum.size() - 1]);
 
-        performShader({ "shaders/calcDepthmapResampling.compute", GL_COMPUTE_SHADER, true });
-        setupDepthmapResampling(m_shaderPrograms[m_shaderPrograms.size() - 1]);
-        getDepthmapResampling(m_workGroupsNum[m_workGroupsNum.size() - 1]);
+		if (!m_sameResoloution)
+		{
+			performShader({ "shaders/calcDepthmapResampling.compute", GL_COMPUTE_SHADER, true });
+			setupDepthmapResampling(m_shaderPrograms[m_shaderPrograms.size() - 1]);
+			getDepthmapResampling(m_workGroupsNum[m_workGroupsNum.size() - 1]);
+		}
 
         performShader({ "shaders/calc3DWorldCoord.compute", GL_COMPUTE_SHADER, true });
         setup3DWorldCoord(m_shaderPrograms[m_shaderPrograms.size() - 1]);
@@ -194,15 +204,27 @@ namespace SceneSynthesis {
 
         GLint location = glGetUniformLocation(programId, "depthCamFocal");
         if (location != -1)
-            glUniform1f(location, 387.7);
+            glUniform1f(location, computeFocalLength(m_camera->fov, m_depthChannel->nCols) - 0.5);
         else
             __debugbreak();
 
         location = glGetUniformLocation(programId, "colorCamFocal");
         if (location != -1)
-            glUniform1f(location, 583.f);
+            glUniform1f(location, computeFocalLength(m_camera->fov, m_redChannel->nCols));
         else
             __debugbreak();
+
+		location = glGetUniformLocation(programId, "Nx");
+		if (location != -1)
+			glUniform1i(location, m_depthChannel->nCols);
+		else
+			__debugbreak();
+
+		location = glGetUniformLocation(programId, "Ny");
+		if (location != -1)
+			glUniform1i(location, m_depthChannel->nRows);
+		else
+			__debugbreak();
 
         location = glGetUniformLocation(programId, "principalpoint");
         if (location != -1)
@@ -259,15 +281,17 @@ namespace SceneSynthesis {
         glGenBuffers(1, &m_resampledZBuffer);
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_resampledZBuffer);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_resampledZBuffer);
-        glBufferData(GL_SHADER_STORAGE_BUFFER, resampledZBufferSize, &m_resampledZs[0], GL_STATIC_DRAW);
-
+		if(!m_sameResoloution)
+			glBufferData(GL_SHADER_STORAGE_BUFFER, resampledZBufferSize, &m_resampledZs[0], GL_STATIC_DRAW);
+		else
+			glBufferData(GL_SHADER_STORAGE_BUFFER, resampledZBufferSize, &m_projectedZs[0], GL_STATIC_DRAW);
         glGenBuffers(1, &m_world3DCoordBuffer);
         glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_world3DCoordBuffer);
         glBufferData(GL_SHADER_STORAGE_BUFFER, world3DcoordBufferSize, &m_world3Dcoord[0], GL_DYNAMIC_DRAW);
 
         GLint location = glGetUniformLocation(programId, "colorCamFocal");
         if (location != -1)
-            glUniform1f(location, 583.f);
+            glUniform1f(location, computeFocalLength(m_camera->fov, m_redChannel->nCols));
         else
             __debugbreak();
 
@@ -338,12 +362,20 @@ namespace SceneSynthesis {
         int bufferLength = m_depthChannel->nCols * m_depthChannel->nRows;
         glDispatchCompute(workGroupNum.x, workGroupNum.y, 1);
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_uvBuffer);
-        glm::vec2* uv = (glm::vec2*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
-        glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
-        m_projectedUVs = std::vector<glm::vec2>(uv, uv + bufferLength);
-        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+		
+		if (!m_sameResoloution)
+		{
+			glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_uvBuffer);
+			glm::vec2* uv = (glm::vec2*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
+			glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+			m_projectedUVs = std::vector<glm::vec2>(uv, uv + bufferLength);
+			glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+			std::cout << "UV : " << std::endl;
+			glm::vec2 m = m_projectedUVs[642 * 720 + 450];
+			std::cout << m.x << " " << m.y << std::endl;
+			m = m_projectedUVs[720];
+			std::cout << m.x << " " << m.y << std::endl;
+		}
 
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_zBuffer);
         double* z = (double*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
@@ -351,11 +383,6 @@ namespace SceneSynthesis {
         m_projectedZs = std::vector<double>(z, z + bufferLength);
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
-		std::cout << "UV : " << std::endl;
-		glm::vec2 m = m_projectedUVs[642 * 720 + 450];
-		std::cout << m.x << " " << m.y << std::endl;
-		m = m_projectedUVs[720];
-		std::cout << m.x << " " << m.y << std::endl;
 		std::cout << "Z:" << std::endl;
 		std::cout << m_projectedZs[0] << std::endl;
     }
@@ -453,7 +480,7 @@ namespace SceneSynthesis {
 			{"shaders/fragmentShader.shader", GL_FRAGMENT_SHADER, true } };
 		performShaders(shaders);
 
-		m_model = computeModelTransform(glm::vec3(0, 0, -2), glm::vec3(0, 0, 180));
+		m_model = computeModelTransform(glm::vec3(0, 0, 0), glm::vec3(0, 0, 180));
 		m_view = computeViewTransform(m_camera->eye, m_camera->forward, m_camera->up);
 		m_projection = computeProjectionTransform(m_camera->fov, m_camera->zmin, m_camera->zmax);
 
@@ -561,6 +588,11 @@ namespace SceneSynthesis {
 			__debugbreak();
 	}
 
+	float application::computeFocalLength(float fov, float sx)
+	{
+		return glm::abs(1 / glm::tan(fov * 0.5) * sx * 0.5);
+	}
+
     void application::run()
     {
 		renderScene();
@@ -571,6 +603,10 @@ namespace SceneSynthesis {
         while (!glfwWindowShouldClose(m_window))
         {
 			beginTick = clock();
+			glfwGetFramebufferSize(m_window, &m_windowWidth, &m_windowWidth);
+			glViewport(0, 0, m_windowWidth, m_windowWidth);
+			glClearColor(0, 0, 0, 1);
+
             processInput(m_window);
 			updateCamera();
             glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -584,6 +620,7 @@ namespace SceneSynthesis {
 			if (clock() - beginTime > interval)
 			{
 				std::cout << "Frame per Second is : " << fps << std::endl;
+				//std::cout << m_camera->eye.x << " " << m_camera->eye.y << " " << m_camera->eye.z << std::endl;
 				beginTime = clock();
 			}
         }
@@ -774,6 +811,7 @@ namespace SceneSynthesis {
 
     void application::destroyWindow()
     {
+
         if (m_window != NULL)
         {
             glfwDestroyWindow(m_window);
@@ -800,6 +838,5 @@ namespace SceneSynthesis {
 		glDeleteBuffers(1, &m_vertexBufferObject);
 		glDeleteBuffers(1, &m_vertexArrayObject);
 		glDeleteBuffers(1, &m_elementBufferObject);
-		
     }
 }

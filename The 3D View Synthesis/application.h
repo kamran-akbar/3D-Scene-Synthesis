@@ -11,6 +11,7 @@
 #include "glm/gtx/rotate_vector.hpp"
 
 
+
 #define ASSERT(x) \
 	if (!(x))     \
 		__debugbreak()
@@ -98,6 +99,7 @@ namespace SceneSynthesis {
 		void renderScene();
 
 		void updateCamera();
+		float computeFocalLength(float fov, float sx);
 
 		glm::mat4 computeModelTransform(const glm::vec3& translation, const glm::vec3& eulerAngles);
 		glm::mat4 computeProjectionTransform(const float& fov, const float& zmin, const float& zmax);
@@ -134,6 +136,8 @@ namespace SceneSynthesis {
 
 		std::vector<Vertex> m_vertices;
 
+		bool m_sameResoloution;
+
 		int m_windowWidth, m_windowHeight;
 
 		unsigned int m_triBuffer, m_uvBuffer, m_zBuffer, m_depthBuffer, m_resampledZBuffer, m_world3DCoordBuffer,
@@ -141,7 +145,8 @@ namespace SceneSynthesis {
 			m_elementBufferObject;
 		unsigned int m_testBuffer;
 
-		float m_rspeed = 0.5, m_tspeed = 0.01, m_fovSpeed = 0.1;
+		float m_rspeed = 0.1, m_tspeed = 0.01, m_fovSpeed = 0.1;
+		float m_sceneLength, m_zmin;
 	};
 }
 

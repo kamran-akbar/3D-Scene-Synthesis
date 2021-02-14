@@ -4,11 +4,11 @@
 
 #define WORK_GROUP_SIZE_X 20
 #define WORK_GROUP_SIZE_Y 20
-#define Nx 1280
-#define Ny 720
 
 uniform float depthCamFocal;
 uniform float colorCamFocal;
+uniform int Nx;
+uniform int Ny;
 uniform vec2 principalpoint;
 
 layout(std430, binding = 0) buffer Depth { double depths[]; };
